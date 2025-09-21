@@ -112,3 +112,35 @@ func (s *SQLite) CreateMovie(title string, rating int, director *types.Director,
 
 	return movie_id, nil
 }
+
+func (s *SQLite) GetMovieByID(id int64) (*types.Movie, error) {
+	row := s.DB.QueryRow(`
+		SELECT
+			m.id, m.title, m.rating,
+			d.id, d.name, d.age,
+			c.id, c.actor, c.actress
+		FROM movies m
+		LEFT JOIN directors d ON m.director_id = d.id
+		LEFT JOIN casts c ON m.cast_id = c.id
+		WHERE m.id = ?
+	`, id)
+
+	var movie types.Movie
+	movie.Director = &types.Director{}
+	movie.Cast = &types.Cast{}
+
+	err := row.Scan(
+		&movie.ID, &movie.Title, &movie.Rating,
+		&movie.Director.ID, &movie.Director.Name, &movie.Director.Age,
+		&movie.Cast.ID, &movie.Cast.Actor, &movie.Cast.Actress,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	return &movie, nil
+}

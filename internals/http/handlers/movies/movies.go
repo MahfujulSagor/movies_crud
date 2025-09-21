@@ -10,6 +10,7 @@ import (
 	"github/MahfujulSagor/movies_crud/internals/utils/response"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-playground/validator"
 )
@@ -56,5 +57,44 @@ func New(db db.DB) http.HandlerFunc {
 			"success": "OK",
 			"message": fmt.Sprintf("Movie created with ID: %d", id),
 		})
+	}
+}
+
+func GetByID(db db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Info.Println("Get movie by ID handler called")
+
+		//? Get ID string from pathvalue
+		idStr := r.PathValue("id")
+		if idStr == "" {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("missing movie ID in URL")))
+			logger.Error.Println("Missing movie ID in URL:")
+			return
+		}
+
+		//? Parse idStr into int64
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(err))
+			logger.Error.Println("Error parsing ID into int64:", err)
+			return
+		}
+
+		//* Retrieve movie from database
+		movie, err := db.GetMovieByID(id)
+		if err != nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(err))
+			logger.Error.Println("Error retrieving movie:", err)
+			return
+		}
+
+		if movie == nil {
+			response.WriteJson(w, http.StatusNotFound, response.GeneralError(fmt.Errorf("movie not found")))
+			logger.Error.Println("Movie not found")
+			return
+		}
+
+		//? Send response
+		response.WriteJson(w, http.StatusOK, *movie)
 	}
 }
