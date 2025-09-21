@@ -155,3 +155,43 @@ func GetList(db db.DB) http.HandlerFunc {
 		response.WriteJson(w, http.StatusOK, movies)
 	}
 }
+
+func DeleteByID(db db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Info.Println("Delete movie by ID handler called")
+
+		//? Get id string from URL
+		idStr := r.PathValue("id")
+		if idStr == "" {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("missing ID")))
+			logger.Error.Println("Missing ID in URL")
+			return
+		}
+
+		//? Parse idStr into int64
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("invalid ID")))
+			logger.Error.Println("Invalid ID:", err)
+			return
+		}
+
+		//* Delete movie from database
+		deleted_id, err := db.DeleteMovieByID(id)
+		if err != nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(err))
+			logger.Error.Println("Failed to delete movie:", err)
+		}
+
+		if deleted_id == 0 {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(fmt.Errorf("movie not found")))
+			logger.Error.Println("Movie to delete not found")
+			return
+		}
+
+		response.WriteJson(w, http.StatusOK, map[string]string{
+			"success": "OK",
+			"message": fmt.Sprintf("Movie deleted with ID %d", deleted_id),
+		})
+	}
+}

@@ -157,10 +157,10 @@ func (s *SQLite) GetMovieByID(id int64) (*types.Movie, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, err
+			return nil, nil
 		}
 
-		return nil, nil
+		return nil, err
 	}
 
 	return &movie, nil
@@ -208,4 +208,40 @@ func (s *SQLite) GetMovieList(limit int, offset int) ([]*types.Movie, error) {
 	}
 
 	return movies, nil
+}
+
+func (s *SQLite) DeleteMovieByID(id int64) (int64, error) {
+	//? Start a transaction
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	//? Delete the movie row
+	res, err := tx.Exec("DELETE FROM movies WHERE id = ?", id)
+	if err != nil {
+		return 0, err
+	}
+
+	//? Check if any row was actually deleted
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	if rowsAffected == 0 {
+		return 0, nil
+	}
+
+	//? Commit transaction
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return id, nil
 }
