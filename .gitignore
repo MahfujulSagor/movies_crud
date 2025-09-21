@@ -39,5 +39,5 @@ go.work.sum
 .db
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
