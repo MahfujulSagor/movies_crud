@@ -23,7 +23,7 @@ func New(db db.DB) http.HandlerFunc {
 		var movie types.Movie
 		err := json.NewDecoder(r.Body).Decode(&movie)
 		if errors.Is(err, io.EOF) {
-			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(err))
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("empty body")))
 			logger.Error.Println("Empty body:", err)
 			return
 		}
@@ -43,7 +43,7 @@ func New(db db.DB) http.HandlerFunc {
 		}
 
 		//* Create movie in database
-		id, err := db.CreateMovie(movie.Title, movie.Rating, movie.Director, movie.Cast)
+		id, err := db.CreateMovie(&movie)
 		if err != nil {
 			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(err))
 			logger.Error.Println("Failed to create movie:", err)
@@ -156,6 +156,54 @@ func GetList(db db.DB) http.HandlerFunc {
 	}
 }
 
+func Update(db db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Info.Println("Update movie handler called")
+
+		//? Decode JSON
+		var movie types.Movie
+		err := json.NewDecoder(r.Body).Decode(&movie)
+		if errors.Is(err, io.EOF) {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("empty body")))
+			logger.Error.Println("Empty body:", err)
+			return
+		}
+
+		if err != nil {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(err))
+			logger.Error.Println("Error decoding movie:", err)
+			return
+		}
+		defer r.Body.Close()
+
+		//? Request validation
+		if err := validator.New().Struct(movie); err != nil {
+			response.WriteJson(w, http.StatusBadRequest, response.ValidationError(err.(validator.ValidationErrors)))
+			logger.Error.Println("Validation error:", err)
+			return
+		}
+
+		//* Update movie
+		updated_movie_id, err := db.UpdateMovie(&movie)
+		if err != nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(err))
+			logger.Error.Println("Failed to update movie:", err)
+			return
+		}
+
+		if updated_movie_id == 0 {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(fmt.Errorf("movie not found")))
+			logger.Error.Println("Movie to update not found")
+			return
+		}
+
+		response.WriteJson(w, http.StatusOK, map[string]string{
+			"success": "OK",
+			"message": fmt.Sprintf("Movie updated with ID %d", updated_movie_id),
+		})
+	}
+}
+
 func DeleteByID(db db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger.Info.Println("Delete movie by ID handler called")
@@ -177,13 +225,13 @@ func DeleteByID(db db.DB) http.HandlerFunc {
 		}
 
 		//* Delete movie from database
-		deleted_id, err := db.DeleteMovieByID(id)
+		deleted_movie_id, err := db.DeleteMovieByID(id)
 		if err != nil {
 			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(err))
 			logger.Error.Println("Failed to delete movie:", err)
 		}
 
-		if deleted_id == 0 {
+		if deleted_movie_id == 0 {
 			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(fmt.Errorf("movie not found")))
 			logger.Error.Println("Movie to delete not found")
 			return
@@ -191,7 +239,7 @@ func DeleteByID(db db.DB) http.HandlerFunc {
 
 		response.WriteJson(w, http.StatusOK, map[string]string{
 			"success": "OK",
-			"message": fmt.Sprintf("Movie deleted with ID %d", deleted_id),
+			"message": fmt.Sprintf("Movie deleted with ID %d", deleted_movie_id),
 		})
 	}
 }

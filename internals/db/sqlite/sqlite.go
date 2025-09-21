@@ -56,25 +56,25 @@ func New(cfg *config.Config) (*SQLite, error) {
 	}, nil
 }
 
-func (s *SQLite) CreateMovie(title string, rating int, director *types.Director, cast *types.Cast) (int64, error) {
+func (s *SQLite) CreateMovie(movie *types.Movie) (int64, error) {
 	//? Transaction
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return 0, err
 	}
-	defer func(tx *sql.Tx) {
+	defer func() {
 		if err != nil {
 			_ = tx.Rollback()
 		}
-	}(tx)
+	}()
 
 	//? ----------- DIRECTOR: check if exists -----------
 	var director_id int64
-	dir_row := tx.QueryRow("SELECT id FROM directors WHERE name = ?", director.Name)
+	dir_row := tx.QueryRow("SELECT id FROM directors WHERE name = ?", movie.Director.Name)
 	err = dir_row.Scan(&director_id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			res, err := tx.Exec("INSERT INTO directors(name, age) VALUES (?, ?)", director.Name, director.Age)
+			res, err := tx.Exec("INSERT INTO directors(name, age) VALUES (?, ?)", movie.Director.Name, movie.Director.Age)
 			if err != nil {
 				return 0, err
 			}
@@ -89,11 +89,11 @@ func (s *SQLite) CreateMovie(title string, rating int, director *types.Director,
 
 	//? ----------- Cast: check if exists -----------
 	var cast_id int64
-	cast_row := tx.QueryRow("SELECT id FROM casts WHERE actor = ? AND actress = ?", cast.Actor, cast.Actress)
+	cast_row := tx.QueryRow("SELECT id FROM casts WHERE actor = ? AND actress = ?", movie.Cast.Actor, movie.Cast.Actress)
 	err = cast_row.Scan(&cast_id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			res, err := tx.Exec("INSERT INTO casts(actor, actress) VALUES (?, ?)", cast.Actor, cast.Actress)
+			res, err := tx.Exec("INSERT INTO casts(actor, actress) VALUES (?, ?)", movie.Cast.Actor, movie.Cast.Actress)
 			if err != nil {
 				return 0, err
 			}
@@ -108,11 +108,11 @@ func (s *SQLite) CreateMovie(title string, rating int, director *types.Director,
 
 	//? ----------- Movie: check if exists -----------
 	var movie_id int64
-	movie_row := tx.QueryRow("SELECT id FROM movies WHERE title = ?", title)
+	movie_row := tx.QueryRow("SELECT id FROM movies WHERE title = ?", movie.Title)
 	err = movie_row.Scan(&movie_id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			res, err := tx.Exec("INSERT INTO movies(title, rating, director_id, cast_id) VALUES (?, ?, ?, ?)", title, rating, director_id, cast_id)
+			res, err := tx.Exec("INSERT INTO movies(title, rating, director_id, cast_id) VALUES (?, ?, ?, ?)", movie.Title, movie.Rating, director_id, cast_id)
 			if err != nil {
 				return 0, err
 			}
@@ -208,6 +208,79 @@ func (s *SQLite) GetMovieList(limit int, offset int) ([]*types.Movie, error) {
 	}
 
 	return movies, nil
+}
+
+func (s *SQLite) UpdateMovie(movie *types.Movie) (int64, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	//? ----------- DIRECTOR: check if exists -----------
+	var director_id int64
+	dir_row := tx.QueryRow("SELECT id FROM directors WHERE name = ?", movie.Director.Name)
+	err = dir_row.Scan(&director_id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			res, err := tx.Exec("INSERT INTO directors(name, age) VALUES (?, ?)", movie.Director.Name, movie.Director.Age)
+			if err != nil {
+				return 0, err
+			}
+			director_id, err = res.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			return 0, err
+		}
+	}
+
+	//? ----------- Cast: check if exists -----------
+	var cast_id int64
+	cast_row := tx.QueryRow("SELECT id FROM casts WHERE actor = ? AND actress = ?", movie.Cast.Actor, movie.Cast.Actress)
+	err = cast_row.Scan(&cast_id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			res, err := tx.Exec("INSERT INTO casts(actor, actress) VALUES (?, ?)", movie.Cast.Actor, movie.Cast.Actress)
+			if err != nil {
+				return 0, err
+			}
+			cast_id, err = res.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			return 0, err
+		}
+	}
+
+	//? ----------- MOVIE: update the row -----------
+	res, err := tx.Exec("UPDATE movies SET title = ?, rating = ?, director_id = ?, cast_id = ? WHERE id = ?",
+		movie.Title, movie.Rating, director_id, cast_id, movie.ID)
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	if rowsAffected == 0 {
+		return 0, nil
+	}
+
+	//? ----------- COMMIT -----------
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return movie.ID, nil
 }
 
 func (s *SQLite) DeleteMovieByID(id int64) (int64, error) {
