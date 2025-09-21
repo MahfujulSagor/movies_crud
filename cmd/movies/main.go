@@ -35,6 +35,7 @@ func main() {
 	//? Setup routes
 	mux.HandleFunc("POST /api/v1/movies", movies.New(db))
 	mux.HandleFunc("GET /api/v1/movies/{id}", movies.GetByID(db))
+	mux.HandleFunc("GET /api/v1/movies", movies.GetList(db))
 
 	//? Setup server
 	server := http.Server{

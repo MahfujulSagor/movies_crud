@@ -75,7 +75,7 @@ func GetByID(db db.DB) http.HandlerFunc {
 		//? Parse idStr into int64
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(err))
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("invalid ID")))
 			logger.Error.Println("Error parsing ID into int64:", err)
 			return
 		}
@@ -95,6 +95,63 @@ func GetByID(db db.DB) http.HandlerFunc {
 		}
 
 		//? Send response
-		response.WriteJson(w, http.StatusOK, *movie)
+		response.WriteJson(w, http.StatusOK, movie)
+	}
+}
+
+func GetList(db db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Info.Println("Get movie list handler called")
+
+		//? Get limit and offset from URL
+		query := r.URL.Query()
+		limitStr := query.Get("limit")
+		offsetStr := query.Get("offset")
+
+		//? Set default values if not provided
+		if limitStr == "" {
+			limitStr = "10"
+		}
+		if offsetStr == "" {
+			offsetStr = "0"
+		}
+
+		//? Convert limit and offset to integers
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("invalid limit value")))
+			logger.Error.Println("Invalid limit value:", err)
+			return
+		}
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("invalid offset value")))
+			logger.Error.Println("Invalid offset value:", err)
+			return
+		}
+
+		//? Enforce a hard upper bound on limit
+		const maxLimit int = 50
+		if limit > maxLimit {
+			limit = maxLimit
+		}
+
+		//* Retrieve movie list from database
+		movies, err := db.GetMovieList(limit, offset)
+		if err != nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(err))
+			logger.Error.Println("Error retrieving students:", err)
+			return
+		}
+
+		//? Handle empty results gracefully
+		if len(movies) == 0 {
+			response.WriteJson(w, http.StatusOK, []types.Movie{})
+			logger.Info.Println("Movie list is empty")
+			return
+		}
+
+		//? Send response
+		response.WriteJson(w, http.StatusOK, movies)
 	}
 }

@@ -136,11 +136,55 @@ func (s *SQLite) GetMovieByID(id int64) (*types.Movie, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, err
 		}
 
-		return nil, err
+		return nil, nil
 	}
 
 	return &movie, nil
+}
+
+func (s *SQLite) GetMovieList(limit int, offset int) ([]*types.Movie, error) {
+	rows, err := s.DB.Query(`
+		SELECT
+			m.id, m.title, m.rating,
+			d.id, d.name, d.age,
+			c.id, c.actor, c.actress
+		FROM movies m
+		LEFT JOIN directors d ON m.director_id = d.id
+		LEFT JOIN casts c ON m.cast_id = c.id
+		ORDER BY m.id
+		LIMIT ? OFFSET ?
+	`, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var movies []*types.Movie
+
+	for rows.Next() {
+		movie := &types.Movie{
+			Director: &types.Director{},
+			Cast:     &types.Cast{},
+		}
+
+		err := rows.Scan(
+			&movie.ID, &movie.Title, &movie.Rating,
+			&movie.Director.ID, &movie.Director.Name, &movie.Director.Age,
+			&movie.Cast.ID, &movie.Cast.Actor, &movie.Cast.Actress,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		movies = append(movies, movie)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return movies, nil
 }
