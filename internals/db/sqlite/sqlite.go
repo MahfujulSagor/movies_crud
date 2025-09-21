@@ -43,6 +43,7 @@ func New(cfg *config.Config) (*SQLite, error) {
 		rating INTEGER NOT NULL,
 		director_id INTEGER,
 		cast_id INTEGER,
+		UNIQUE(title, director_id, cast_id),
 		FOREIGN KEY (director_id) REFERENCES directors(id),
 		FOREIGN KEY (cast_id) REFERENCES casts(id)
 	)`)
@@ -61,53 +62,73 @@ func (s *SQLite) CreateMovie(title string, rating int, director *types.Director,
 	if err != nil {
 		return 0, err
 	}
-	defer func() {
+	defer func(tx *sql.Tx) {
 		if err != nil {
 			_ = tx.Rollback()
 		}
-	}()
+	}(tx)
 
-	//* Directors
-	//? Execute statement
-	dir_res, err := tx.Exec("INSERT INTO directors(name, age) VALUES (?, ?)", director.Name, director.Age)
+	//? ----------- DIRECTOR: check if exists -----------
+	var director_id int64
+	dir_row := tx.QueryRow("SELECT id FROM directors WHERE name = ?", director.Name)
+	err = dir_row.Scan(&director_id)
 	if err != nil {
-		return 0, err
+		if err == sql.ErrNoRows {
+			res, err := tx.Exec("INSERT INTO directors(name, age) VALUES (?, ?)", director.Name, director.Age)
+			if err != nil {
+				return 0, err
+			}
+			director_id, err = res.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			return 0, err
+		}
 	}
 
-	//? Get the last inserted ID
-	director_id, err := dir_res.LastInsertId()
+	//? ----------- Cast: check if exists -----------
+	var cast_id int64
+	cast_row := tx.QueryRow("SELECT id FROM casts WHERE actor = ? AND actress = ?", cast.Actor, cast.Actress)
+	err = cast_row.Scan(&cast_id)
 	if err != nil {
-		return 0, err
+		if err == sql.ErrNoRows {
+			res, err := tx.Exec("INSERT INTO casts(actor, actress) VALUES (?, ?)", cast.Actor, cast.Actress)
+			if err != nil {
+				return 0, err
+			}
+			cast_id, err = res.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			return 0, err
+		}
 	}
 
-	//* Casts
-	//? Execute statement
-	cast_res, err := tx.Exec("INSERT INTO casts(actor, actress) VALUES (?, ?)", cast.Actor, cast.Actress)
+	//? ----------- Movie: check if exists -----------
+	var movie_id int64
+	movie_row := tx.QueryRow("SELECT id FROM movies WHERE title = ?", title)
+	err = movie_row.Scan(&movie_id)
 	if err != nil {
-		return 0, err
-	}
+		if err == sql.ErrNoRows {
+			res, err := tx.Exec("INSERT INTO movies(title, rating, director_id, cast_id) VALUES (?, ?, ?, ?)", title, rating, director_id, cast_id)
+			if err != nil {
+				return 0, err
+			}
+			movie_id, err = res.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			return 0, nil
+		}
 
-	//? Get the last inserted ID
-	cast_id, err := cast_res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	//* Movies
-	//? Execute statement
-	movie_res, err := tx.Exec("INSERT INTO movies(title, rating, director_id, cast_id) VALUES (?, ?, ?, ?)", title, rating, director_id, cast_id)
-	if err != nil {
-		return 0, err
-	}
-
-	//? Get the last inserted ID
-	movie_id, err := movie_res.LastInsertId()
-	if err != nil {
 		return 0, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return 0, nil
+		return 0, err
 	}
 
 	return movie_id, nil
