@@ -160,9 +160,33 @@ func Update(db db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger.Info.Println("Update movie handler called")
 
+		//? Get id from URL
+		idStr := r.PathValue("id")
+		if idStr == "" {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("missing ID")))
+			logger.Error.Println("Missing ID in URL")
+			return
+		}
+
+		//? Parse idStr into int64
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("invalid ID")))
+			logger.Error.Println("Error parsing ID:", err)
+			return
+		}
+
+		//? Check if movie exists
+		m, err := db.GetMovieByID(id)
+		if err != nil || m == nil {
+			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(fmt.Errorf("movie does not exist")))
+			logger.Error.Println("Movie doen not exist", err)
+			return
+		}
+
 		//? Decode JSON
 		var movie types.Movie
-		err := json.NewDecoder(r.Body).Decode(&movie)
+		err = json.NewDecoder(r.Body).Decode(&movie)
 		if errors.Is(err, io.EOF) {
 			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("empty body")))
 			logger.Error.Println("Empty body:", err)
@@ -184,7 +208,7 @@ func Update(db db.DB) http.HandlerFunc {
 		}
 
 		//* Update movie
-		updated_movie_id, err := db.UpdateMovie(&movie)
+		updated_movie_id, err := db.UpdateMovie(id, &movie)
 		if err != nil {
 			response.WriteJson(w, http.StatusInternalServerError, response.GeneralError(err))
 			logger.Error.Println("Failed to update movie:", err)

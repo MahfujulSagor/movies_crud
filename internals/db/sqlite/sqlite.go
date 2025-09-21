@@ -20,7 +20,7 @@ func New(cfg *config.Config) (*SQLite, error) {
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS directors(
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
+		name TEXT UNIQUE NOT NULL,
 		age INTEGER
 	)`)
 
@@ -210,7 +210,7 @@ func (s *SQLite) GetMovieList(limit int, offset int) ([]*types.Movie, error) {
 	return movies, nil
 }
 
-func (s *SQLite) UpdateMovie(movie *types.Movie) (int64, error) {
+func (s *SQLite) UpdateMovie(id int64, movie *types.Movie) (int64, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return 0, err
@@ -261,7 +261,7 @@ func (s *SQLite) UpdateMovie(movie *types.Movie) (int64, error) {
 
 	//? ----------- MOVIE: update the row -----------
 	res, err := tx.Exec("UPDATE movies SET title = ?, rating = ?, director_id = ?, cast_id = ? WHERE id = ?",
-		movie.Title, movie.Rating, director_id, cast_id, movie.ID)
+		movie.Title, movie.Rating, director_id, cast_id, id)
 	if err != nil {
 		return 0, err
 	}
@@ -280,7 +280,7 @@ func (s *SQLite) UpdateMovie(movie *types.Movie) (int64, error) {
 		return 0, err
 	}
 
-	return movie.ID, nil
+	return id, nil
 }
 
 func (s *SQLite) DeleteMovieByID(id int64) (int64, error) {
